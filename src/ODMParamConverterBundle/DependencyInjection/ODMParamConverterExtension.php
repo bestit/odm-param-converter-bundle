@@ -22,5 +22,9 @@ class ODMParamConverterExtension extends Extension
     {
         $loader = new YamlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.yml');
+
+        $config = $this->processConfiguration(new Configuration(), $configs);
+
+        $container->setParameter('best_it_odmparam_converter.odm_manager', $config['odm_manager']);
     }
 }
