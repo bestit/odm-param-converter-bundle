@@ -21,6 +21,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  *
  * @author Michel Chowanski <chowanski@bestit-online.de>
  * @package BestIt\ODMParamConverterBundle\Converter
+ * @SuppressWarnings(PHPMD.UnusedFormalParameter)
  */
 class ODMConverter implements ParamConverterInterface
 {
@@ -53,8 +54,7 @@ class ODMConverter implements ParamConverterInterface
         $class = $configuration->getClass();
         $options = $configuration->getOptions();
 
-        try
-        {
+        try {
             // Find by identifier?
             if (($object = $this->findByIdentifier($request, $options, $class)) === false) {
                 // Find by criteria
@@ -109,21 +109,10 @@ class ODMConverter implements ParamConverterInterface
             return false;
         }
 
-        $knownFields = [];
         $mapMethodBySignature = $options['map_method_signature'] ?? false;
-        $meta = $this->documentManager->getClassMetadata($class);
-        if (($jsonObject = $meta->getReflectionClass()->newInstance()) instanceof JsonObject) {
-            $knownFields = array_keys($jsonObject->fieldDefinitions());
-        }
 
         // Resolve mapping
-        $resolvedMapping = [];
-        foreach ($options['mapping'] as $attribute => $field) {
-            if ($mapMethodBySignature === true || in_array($field, $knownFields, true)) {
-                $resolvedMapping[$field] = $request->attributes->get($attribute);
-            }
-        }
-
+        $resolvedMapping = $this->resolveMapping($request, $options, $class);
         $repository = $this->documentManager->getRepository($class);
 
         // Use custom method
@@ -207,19 +196,63 @@ class ODMConverter implements ParamConverterInterface
     }
 
     /**
+     * Get the known field for the given class name
+     *
+     * @param string $className The name of the class
+     *
+     * @return array
+     */
+    private function getKnownFieldsFromClass(string $className):array
+    {
+        $knownFields = [];
+        $meta = $this->documentManager->getClassMetadata($className);
+        if (($jsonObject = $meta->getReflectionClass()->newInstance()) instanceof JsonObject) {
+            $knownFields = array_keys($jsonObject->fieldDefinitions());
+        }
+
+        return $knownFields;
+    }
+
+    /**
+     * Resolve the mapping for the class from the given request
+     *
+     * @param Request $request The current request
+     * @param array $options The options for the resolve process
+     * @param string $className The name of the class
+     *
+     * @return array
+     */
+    private function resolveMapping(Request $request, array $options, string $className):array
+    {
+        // Resolve mapping
+        $resolvedMapping = [];
+        $knownFields = $this->getKnownFieldsFromClass($className);
+        $mapMethodBySignature = $options['map_method_signature'] ?? false;
+
+        foreach ($options['mapping'] as $attribute => $field) {
+            if ($mapMethodBySignature === true || in_array($field, $knownFields, true)) {
+                $resolvedMapping[$field] = $request->attributes->get($attribute);
+            }
+        }
+
+        return $resolvedMapping;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function supports(ParamConverter $configuration)
     {
         $isSupported = false;
 
-        try {
-            $class = $configuration->getClass();
-            $meta = $this->documentManager->getClassMetadata($class);
+        if ($class = $configuration->getClass()) {
+            try {
+                $meta = $this->documentManager->getClassMetadata($class);
 
-            $isSupported = !(!$meta instanceof ClassMetadataInterface || strlen($meta->getRepository()) <= 0);
-        } catch (MappingException $mappingException) {
-            // do nothing.
+                $isSupported = !(!$meta instanceof ClassMetadataInterface || strlen($meta->getRepository()) <= 0);
+            } catch (MappingException $mappingException) {
+                // do nothing.
+            }
         }
 
         return $isSupported;
